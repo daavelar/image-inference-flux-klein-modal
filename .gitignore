@@ -1,0 +1,73 @@
+# --- Python ---
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+*.cover
+
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- IDE & editor ---
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs & local runtime ---
+*.log
+*.tmp
+
+# --- Model weights (keep placeholder files in repo) ---
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.gguf
+
+# --- Project model directories (placeholders only) ---
+diffusion_models/*
+!diffusion_models/put_diffusion_model_files_here
+text_encoders/*
+!text_encoders/put_text_encoder_files_here
+vae/*
+!vae/put_vae_here
+loras/*
+
+# --- Embedded ComfyUI runtime ---
+vendor/comfyui/output/
+vendor/comfyui/temp/
+vendor/comfyui/input/
+vendor/comfyui/user/
+vendor/comfyui/__pycache__/
+vendor/comfyui/**/__pycache__/
+
+# --- Modal (local CLI cache, if present) ---
+.modal/

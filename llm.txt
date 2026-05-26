@@ -1,0 +1,368 @@
+# Flux Klein Image Generation API
+
+> Instruções para integração de aplicações com o gerador de imagens Flux Klein 9B.
+
+Base URL: https://diego-11033--flux-http.modal.run/
+OpenAPI / Swagger: https://diego-11033--flux-http.modal.run/docs
+OpenAPI JSON: https://diego-11033--flux-http.modal.run/openapi.json
+
+## Visão geral
+
+Este serviço gera imagens 1024×1024 a partir de um prompt de texto usando o modelo Flux Klein 9B (ComfyUI em GPU na Modal). A imagem gerada é enviada para armazenamento S3-compatível (R2) e a resposta inclui a URL pública.
+
+Não há autenticação na API HTTP. Trate a URL como endpoint privado se exposta publicamente.
+
+Fluxo recomendado para aplicações: **assíncrono** (POST /generate → poll GET /result/{call_id}). Use modo síncrono apenas para testes ou integrações simples com timeout longo.
+
+Tempo típico de inferência: 8–60 segundos (depende de cold start da GPU, LoRAs e imagens de referência).
+
+## Endpoints
+
+### GET /health
+
+Verifica se o serviço está no ar e se os modelos estão disponíveis no volume.
+
+Resposta 200:
+```json
+{
+  "status": "ok",
+  "model_ready": true,
+  "loras_count": 12
+}
+```
+
+Use antes de enfileirar jobs em produção. `model_ready: false` indica que os modelos ainda não estão montados no volume Modal.
+
+---
+
+### GET /loras
+
+Lista os arquivos LoRA disponíveis (`.safetensors` no volume).
+
+Resposta 200:
+```json
+[
+  {"filename": "flux_nina.safetensors"},
+  {"filename": "flux_portrait_engine.safetensors"}
+]
+```
+
+Sempre use o `filename` exato retornado por este endpoint ao montar o payload de `/generate`.
+
+---
+
+### POST /generate
+
+Enfileira (ou executa) uma geração de imagem.
+
+Headers obrigatórios:
+- Content-Type: application/json
+
+Query params:
+- `blocking` (boolean, default: false)
+  - `false` (padrão): retorna imediatamente com `call_id` para polling
+  - `true`: aguarda a inferência terminar e retorna o resultado direto (pode levar dezenas de segundos; configure timeout HTTP ≥ 120s)
+
+#### Corpo da requisição
+
+O body aceita dois formatos equivalentes:
+
+Formato A — campos no top level:
+```json
+{
+  "prompt": "a portrait of a woman, studio lighting",
+  "steps": 4,
+  "seed": 42,
+  "loras": [
+    {"filename": "flux_nina.safetensors", "weight": 1.0}
+  ],
+  "reference_images": []
+}
+```
+
+Formato B — wrapper `input` (compatível com workers Modal):
+```json
+{
+  "input": {
+    "prompt": "a portrait of a woman, studio lighting",
+    "steps": 4,
+    "seed": 42,
+    "loras": [],
+    "reference_images": []
+  }
+}
+```
+
+#### Campos
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| prompt | string | sim | Descrição da imagem. Não pode ser vazio. |
+| steps | integer | não | Passos de difusão. Default: 4. Recomendado: 1–50. |
+| seed | integer | não | Seed para reprodutibilidade. Se omitido, um valor aleatório é gerado e devolvido na resposta. |
+| loras | array | não | Lista de LoRAs a aplicar. Default: []. |
+| loras[].filename | string | sim* | Nome do arquivo `.safetensors` (sem path). Deve existir em GET /loras. |
+| loras[].weight | number | não | Intensidade do LoRA. Default: 1.0. Faixa válida: 0.0–2.0. |
+| reference_images | array | não | Até 4 imagens de referência para conditioning visual. Default: []. |
+
+*Obrigatório quando o item está presente em `loras`.
+
+#### Imagens de referência (`reference_images`)
+
+Cada entrada é uma string em um destes formatos:
+- URL HTTP/HTTPS pública (baixada pelo servidor, timeout 15s)
+- Data URI base64: `data:image/png;base64,...` (também JPEG/WEBP)
+- String base64 pura (sem prefixo data URI)
+
+Limites:
+- Máximo 4 imagens por request
+- Máximo 10 MB por imagem
+- Lado máximo 4096 px
+- Formatos: PNG, JPEG, WEBP
+
+As imagens são redimensionadas para 1024×1024 (crop central) antes da inferência.
+
+#### Parâmetros fixos do pipeline (não configuráveis via API)
+
+- Resolução: 1024×1024
+- Sampler: euler
+- Scheduler: simple
+- CFG: 1.0
+- FluxGuidance: 4.0
+- Modelo: flux-2-klein-9b.safetensors
+
+#### Resposta assíncrona (blocking=false, padrão)
+
+Status 202:
+```json
+{
+  "status": "pending",
+  "call_id": "fc-01KSB1D1XZFVMY0YKHNW66W4AW",
+  "task_id": "fc-01KSB1D1XZFVMY0YKHNW66W4AW",
+  "result_url": "/result/fc-01KSB1D1XZFVMY0YKHNW66W4AW"
+}
+```
+
+Guarde `call_id` e faça polling em `GET /result/{call_id}` (URL completa: Base URL + result_url).
+
+#### Resposta síncrona (blocking=true)
+
+Status 200 (sucesso):
+```json
+{
+  "url": "https://example.com/inferences/20260523/uuid.png",
+  "key": "inferences/20260523/uuid.png",
+  "seed": 7179589646731337213,
+  "duration_seconds": 8.27,
+  "cost": 0.000827
+}
+```
+
+Status 400 (erro de validação/inferência):
+```json
+{
+  "error": "prompt (non-empty string) required"
+}
+```
+
+---
+
+### GET /result/{call_id}
+
+Consulta o status/resultado de um job assíncrono.
+
+Status 202 — ainda processando:
+```json
+{
+  "status": "pending",
+  "call_id": "fc-01KSB1D1XZFVMY0YKHNW66W4AW"
+}
+```
+
+Status 200 — concluído com sucesso:
+```json
+{
+  "url": "https://example.com/inferences/20260523/uuid.png",
+  "key": "inferences/20260523/uuid.png",
+  "seed": 3064420150743042828,
+  "duration_seconds": 30.21,
+  "cost": 0.003021,
+  "status": "completed",
+  "call_id": "fc-01KSB1D1XZFVMY0YKHNW66W4AW"
+}
+```
+
+Status 400 — job terminou com erro de negócio (prompt inválido, LoRA inexistente, etc.):
+```json
+{
+  "error": "Lora not found: missing.safetensors",
+  "status": "failed",
+  "call_id": "fc-01KSB1D1XZFVMY0YKHNW66W4AW"
+}
+```
+
+Status 500 — falha de infraestrutura:
+```json
+{
+  "status": "failed",
+  "call_id": "fc-...",
+  "error": "..."
+}
+```
+
+## Fluxo de integração recomendado
+
+```
+1. GET /health          → confirmar model_ready == true
+2. GET /loras           → (opcional) listar LoRAs disponíveis
+3. POST /generate       → receber call_id (202)
+4. loop:
+     GET /result/{call_id}
+     se status == "pending" → aguardar 2–5s e repetir
+     se status == "completed" → usar campo "url"
+     se status == "failed" ou "error" presente → tratar erro
+```
+
+Intervalo de polling sugerido: 2–5 segundos. Timeout total sugerido: 120–180 segundos (cold start de GPU pode demorar).
+
+## Exemplos de integração
+
+### cURL — assíncrono
+
+```bash
+BASE="https://diego-11033--flux-http.modal.run"
+
+# Enfileirar
+RESP=$(curl -sS -X POST "$BASE/generate" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"a red apple on a wooden table","steps":4}')
+
+CALL_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['call_id'])")
+
+# Poll até completar
+while true; do
+  RESULT=$(curl -sS "$BASE/result/$CALL_ID")
+  STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
+  echo "$RESULT"
+  [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ] && break
+  sleep 3
+done
+```
+
+### cURL — síncrono
+
+```bash
+curl -sS -X POST "https://diego-11033--flux-http.modal.run/generate?blocking=true" \
+  -H "Content-Type: application/json" \
+  --max-time 180 \
+  -d '{
+    "prompt": "a portrait of a woman, studio lighting",
+    "steps": 4,
+    "seed": 42,
+    "loras": [{"filename": "flux_nina.safetensors", "weight": 1.0}]
+  }'
+```
+
+### JavaScript (fetch) — assíncrono
+
+```javascript
+const BASE = "https://diego-11033--flux-http.modal.run";
+
+async function generateImage(prompt, options = {}) {
+  const enqueue = await fetch(`${BASE}/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, ...options }),
+  });
+  const { call_id } = await enqueue.json();
+
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    const res = await fetch(`${BASE}/result/${call_id}`);
+    const data = await res.json();
+    if (data.status === "completed") return data;
+    if (data.status === "failed" || data.error) throw new Error(data.error ?? "Generation failed");
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error("Generation timed out");
+}
+
+// Uso:
+// const result = await generateImage("a sunset over mountains", { steps: 4 });
+// console.log(result.url, result.seed);
+```
+
+### Python (requests) — assíncrono
+
+```python
+import time
+import requests
+
+BASE = "https://diego-11033--flux-http.modal.run"
+
+def generate_image(prompt: str, **kwargs) -> dict:
+    payload = {"prompt": prompt, **kwargs}
+    r = requests.post(f"{BASE}/generate", json=payload, timeout=30)
+    r.raise_for_status()
+    call_id = r.json()["call_id"]
+
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        res = requests.get(f"{BASE}/result/{call_id}", timeout=30)
+        data = res.json()
+        if data.get("status") == "completed":
+            return data
+        if data.get("status") == "failed" or data.get("error"):
+            raise RuntimeError(data.get("error", "Generation failed"))
+        time.sleep(3)
+    raise TimeoutError("Generation timed out")
+
+# result = generate_image("a cat wearing sunglasses", steps=4)
+# print(result["url"], result["seed"])
+```
+
+## Campos da resposta de sucesso
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| url | string | URL pública da imagem PNG gerada |
+| key | string | Chave do objeto no bucket (ex.: inferences/20260523/uuid.png) |
+| seed | integer | Seed efetivamente usado (útil para reproduzir a mesma imagem) |
+| duration_seconds | number | Tempo de inferência em segundos |
+| cost | number | Custo estimado (duration_seconds × 0.000222, taxa L4 Modal) |
+| status | string | "completed" (apenas no polling assíncrono) |
+| call_id | string | ID do job Modal (apenas no polling assíncrono) |
+
+A aplicação cliente deve usar `url` para exibir ou baixar a imagem. Persista `seed` se quiser permitir regeneração idêntica.
+
+## Erros comuns e como tratar
+
+| Situação | HTTP | Ação recomendada |
+|----------|------|------------------|
+| prompt ausente ou vazio | 400 (blocking) ou 400 no /result | Validar prompt no cliente antes de enviar |
+| LoRA inexistente | 400 no /result | Consultar GET /loras antes de usar |
+| filename LoRA com path (`../`) | 400 no /result | Enviar apenas o nome do arquivo |
+| reference_images inválida | 400 no /result | Verificar formato, tamanho e URL acessível |
+| Job ainda rodando | 202 no /result | Continuar polling |
+| Cold start / GPU ocupada | 202 prolongado | Aumentar timeout e intervalo de poll |
+| Falha S3/upload | 500 | Retry com backoff; verificar saúde do serviço |
+
+## Boas práticas para aplicações
+
+1. **Valide localmente** o `prompt` (não vazio) e os LoRAs (contra cache de GET /loras) antes de chamar a API.
+2. **Prefira modo assíncrono** em backends web; não bloqueie a request HTTP do usuário por 30–60s.
+3. **Implemente timeout e retry** no polling; cold starts na Modal podem atrasar o primeiro job.
+4. **Armazene `seed` + prompt + loras** se precisar regenerar a mesma imagem depois.
+5. **Não embuta a URL da API** em apps cliente públicos sem rate limiting/proxy — a API não tem auth.
+6. **Use HEAD /health** ou GET /health em health checks periódicos.
+7. **Limite reference_images** a URLs estáveis e públicas; o servidor baixa a imagem (timeout 15s).
+
+## Checklist mínimo de integração
+
+- [ ] Configurar `FLUX_API_BASE=https://diego-11033--flux-http.modal.run`
+- [ ] Health check em startup (`GET /health`, checar `model_ready`)
+- [ ] POST /generate com `Content-Type: application/json`
+- [ ] Polling de GET /result/{call_id} até `status: completed` ou erro
+- [ ] Exibir/salvar imagem a partir de `url` na resposta
+- [ ] Tratar erros via campo `error` e status HTTP
+- [ ] Timeout total ≥ 120s para jobs assíncronos

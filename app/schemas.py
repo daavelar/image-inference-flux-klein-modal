@@ -1,0 +1,32 @@
+from pydantic import BaseModel, Field
+
+
+class LoraSpec(BaseModel):
+    filename: str
+    weight: float = Field(default=1.0, ge=0.0, le=2.0)
+
+
+class GenerateRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    steps: int | None = Field(default=None, ge=1, le=50)
+    seed: int | None = None
+    loras: list[LoraSpec] = Field(default_factory=list)
+    reference_images: list[str] = Field(default_factory=list, max_length=4)
+
+
+class GenerateResponse(BaseModel):
+    url: str
+    key: str
+    seed: int
+    duration_seconds: float
+    cost: float
+
+
+class LoraInfo(BaseModel):
+    filename: str
+
+
+class HealthResponse(BaseModel):
+    status: str
+    model_loaded: bool
+    loras_count: int
