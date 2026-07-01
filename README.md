@@ -63,7 +63,7 @@ curl -X POST http://localhost:8002/generate \
   }'
 ```
 
-Imagens salvas em `inferences/{Ymd}/{uuid}.png` no bucket R2.
+Imagens salvas em `modal_flux_infs/{Ymd}/{uuid}.png` no bucket R2.
 
 ## Parâmetros fixos
 

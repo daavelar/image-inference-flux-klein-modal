@@ -10,7 +10,7 @@ from app.config import Settings
 
 def upload_image(settings: Settings, image_bytes: bytes) -> tuple[str, str]:
     date_prefix = datetime.now(timezone.utc).strftime("%Y%m%d")
-    object_key = f"inferences/{date_prefix}/{uuid4()}.png"
+    object_key = f"modal_flux_infs/{date_prefix}/{uuid4()}.png"
 
     client = boto3.client(
         service_name="s3",

@@ -150,8 +150,8 @@ Guarde `call_id` e faça polling em `GET /result/{call_id}` (URL completa: Base 
 Status 200 (sucesso):
 ```json
 {
-  "url": "https://example.com/inferences/20260523/uuid.png",
-  "key": "inferences/20260523/uuid.png",
+  "url": "https://example.com/modal_flux_infs/20260523/uuid.png",
+  "key": "modal_flux_infs/20260523/uuid.png",
   "seed": 7179589646731337213,
   "duration_seconds": 8.27,
   "cost": 0.000827
@@ -182,8 +182,8 @@ Status 202 — ainda processando:
 Status 200 — concluído com sucesso:
 ```json
 {
-  "url": "https://example.com/inferences/20260523/uuid.png",
-  "key": "inferences/20260523/uuid.png",
+  "url": "https://example.com/modal_flux_infs/20260523/uuid.png",
+  "key": "modal_flux_infs/20260523/uuid.png",
   "seed": 3064420150743042828,
   "duration_seconds": 30.21,
   "cost": 0.003021,
@@ -326,7 +326,7 @@ def generate_image(prompt: str, **kwargs) -> dict:
 | Campo | Tipo | Descrição |
 |-------|------|-----------|
 | url | string | URL pública da imagem PNG gerada |
-| key | string | Chave do objeto no bucket (ex.: inferences/20260523/uuid.png) |
+| key | string | Chave do objeto no bucket (ex.: modal_flux_infs/20260523/uuid.png) |
 | seed | integer | Seed efetivamente usado (útil para reproduzir a mesma imagem) |
 | duration_seconds | number | Tempo de inferência em segundos |
 | cost | number | Custo estimado (duration_seconds × 0.000222, taxa L4 Modal) |

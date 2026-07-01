@@ -1,5 +1,5 @@
 flux_klein_api:
-    base_path: /home/dieguera/Projetos/image-inference-flux-klein/
+    base_path: /workspace/
     is_default: true
     diffusion_models: diffusion_models/
     text_encoders: text_encoders/
