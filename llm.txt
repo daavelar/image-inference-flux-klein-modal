@@ -104,8 +104,42 @@ Formato B — wrapper `input` (compatível com workers Modal):
 | loras[].filename | string | sim* | Nome do arquivo `.safetensors` (sem path). Deve existir em GET /loras. |
 | loras[].weight | number | não | Intensidade do LoRA. Default: 1.0. Faixa válida: 0.0–2.0. |
 | reference_images | array | não | Até 4 imagens de referência para conditioning visual. Default: []. |
+| callback_url | string | não | URL que receberá POST quando a inferência terminar (alternativa ao polling). |
+| external_id | integer/string | não | ID do consumidor repassado no webhook (ex.: ID do registro no seu banco). |
 
 *Obrigatório quando o item está presente em `loras`.
+
+#### Webhook (`callback_url`)
+
+Se `callback_url` for informado, o serviço envia um POST para essa URL assim que o job terminar (sucesso ou falha). O polling em `GET /result/{call_id}` continua disponível como fallback.
+
+Headers enviados (quando configurado no Modal Secret):
+- `Content-Type: application/json`
+- `X-Modal-Webhook-Key: <MODAL_WEBHOOK_KEY>`
+
+Payload de sucesso:
+```json
+{
+  "status": "completed",
+  "external_id": 123,
+  "call_id": "fc-...",
+  "url": "https://...",
+  "key": "modal_flux_infs/...",
+  "seed": 42,
+  "duration_seconds": 8.2,
+  "cost": 0.004
+}
+```
+
+Payload de falha:
+```json
+{
+  "status": "failed",
+  "external_id": 123,
+  "call_id": "fc-...",
+  "error": "prompt (non-empty string) required"
+}
+```
 
 #### Imagens de referência (`reference_images`)
 

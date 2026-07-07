@@ -12,6 +12,8 @@ class GenerateRequest(BaseModel):
     seed: int | None = None
     loras: list[LoraSpec] = Field(default_factory=list)
     reference_images: list[str] = Field(default_factory=list, max_length=4)
+    callback_url: str | None = None
+    external_id: int | str | None = None
 
 
 class GenerateResponse(BaseModel):

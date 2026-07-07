@@ -43,7 +43,7 @@ HERE = Path(__file__).resolve().parent
 
 VOL_NAME = os.environ.get("MODAL_VOLUME_NAME", "fluxkleininf")
 VOL_MOUNT = os.environ.get("MODAL_VOLUME_MOUNT", "/my_vol")
-_DEFAULT_GPU: list[str] = ["L4", "A10"]
+_DEFAULT_GPU: list[str] = ["L40S", "A10"]
 MODAL_GPU_RAW = os.environ.get("MODAL_GPU", "").strip()
 INFERENCE_GPU: str | list[str] = MODAL_GPU_RAW if MODAL_GPU_RAW else _DEFAULT_GPU
 
@@ -66,8 +66,11 @@ _MOUNT_IGNORE = [
 
 _volume = modal.Volume.from_name(VOL_NAME, create_if_missing=True)
 
-web_image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "fastapi>=0.115.0",
+web_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi>=0.115.0", "httpx>=0.27.0")
+    .add_local_dir(str(HERE / "app"), remote_path="/app/app")
+    .env({"PYTHONPATH": "/app"})
 )
 
 image = (
@@ -126,6 +129,32 @@ def _job_from_http_body(body: object) -> dict:
     if "input" in body:
         return dict(body)
     return {"input": body}
+
+
+def _split_job_and_callback(body: object) -> tuple[dict, str | None, int | str | None]:
+    from app.callbacks import extract_callback_meta, validate_callback_url
+
+    if not isinstance(body, dict):
+        raise ValueError("JSON body must be an object")
+
+    if "input" in body and isinstance(body["input"], dict):
+        outer = dict(body)
+        inner = dict(outer["input"])
+        callback_url = outer.pop("callback_url", None)
+        if callback_url is None:
+            callback_url = inner.pop("callback_url", None)
+        external_id = outer.pop("external_id", None)
+        if external_id is None:
+            external_id = inner.pop("external_id", None)
+        outer["input"] = inner
+        if callback_url is not None:
+            callback_url = validate_callback_url(str(callback_url))
+        if external_id is not None and not isinstance(external_id, (int, str)):
+            raise ValueError("external_id must be an integer or string")
+        return _job_from_http_body(outer), callback_url, external_id
+
+    job_body, callback_url, external_id = extract_callback_meta(dict(body))
+    return _job_from_http_body(job_body), callback_url, external_id
 
 
 def _list_loras_from_volume() -> list[dict]:
@@ -193,8 +222,10 @@ def _build_fastapi_app():
 
     @api.post("/generate")
     def generate_http(body: dict, blocking: bool = False):
+        from app.callbacks import build_callback_payload, post_callback
+
         try:
-            job = _job_from_http_body(body)
+            job, callback_url, external_id = _split_job_and_callback(body)
         except ValueError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -205,6 +236,9 @@ def _build_fastapi_app():
                 result = worker.run_job.remote(job)
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
+            if callback_url:
+                payload = build_callback_payload("blocking", result, external_id)
+                post_callback(callback_url, payload)
             status_code = 400 if result.get("error") else 200
             return JSONResponse(result, status_code=status_code)
 
@@ -213,6 +247,8 @@ def _build_fastapi_app():
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
         cid = fc.object_id
+        if callback_url:
+            deliver_callback.spawn(cid, callback_url, external_id)
         return JSONResponse(
             {
                 "status": "pending",
@@ -255,6 +291,19 @@ class FluxKleinWorker:
         from app.inference import generate_from_payload
 
         return generate_from_payload(self.settings, job)
+
+
+@app.function(
+    image=web_image,
+    volumes={VOL_MOUNT: _volume},
+    secrets=_optional_secrets(),
+    timeout=60 * 30,
+    scaledown_window=300,
+)
+def deliver_callback(call_id: str, callback_url: str, external_id: int | str | None = None):
+    from app.callbacks import deliver_callback_for_call
+
+    deliver_callback_for_call(call_id, callback_url, external_id)
 
 
 @app.function(

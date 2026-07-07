@@ -1,3 +1,4 @@
+modal
 fastapi
 uvicorn[standard]
 pydantic-settings
@@ -24,6 +25,7 @@ filelock
 comfy-kitchen>=0.2.8
 comfy-aimdo>=0.2.12
 requests
+httpx>=0.27.0
 simpleeval>=1.0.0
 blake3
 kornia>=0.7.1
