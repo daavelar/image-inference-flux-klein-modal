@@ -13,7 +13,8 @@ Secrets (Modal Secret name from ``MODAL_AWS_SECRET``):
     AWS_BUCKET, AWS_ENDPOINT, AWS_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
     Optional: AWS_DEFAULT_REGION, AWS_USE_PATH_STYLE_ENDPOINT
 
-GPU: default ``L4`` with ``A10`` fallback (override with ``MODAL_GPU``).
+GPU: default fallback chain ``H200`` → ``H100`` → ``RTX-PRO-6000`` →
+``A100-80GB`` → ``A100-40GB`` → ``L40S`` (override with ``MODAL_GPU``).
 
 Populate the volume once from your machine:
     python scripts/upload-models-to-modal-volume.py
@@ -43,7 +44,14 @@ HERE = Path(__file__).resolve().parent
 
 VOL_NAME = os.environ.get("MODAL_VOLUME_NAME", "fluxkleininf")
 VOL_MOUNT = os.environ.get("MODAL_VOLUME_MOUNT", "/my_vol")
-_DEFAULT_GPU: list[str] = ["L40S", "A10"]
+_DEFAULT_GPU: list[str] = [
+    "H200",
+    "H100",
+    "RTX-PRO-6000",
+    "A100-80GB",
+    "A100-40GB",
+    "L40S",
+]
 MODAL_GPU_RAW = os.environ.get("MODAL_GPU", "").strip()
 INFERENCE_GPU: str | list[str] = MODAL_GPU_RAW if MODAL_GPU_RAW else _DEFAULT_GPU
 
@@ -69,8 +77,8 @@ _volume = modal.Volume.from_name(VOL_NAME, create_if_missing=True)
 web_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("fastapi>=0.115.0", "httpx>=0.27.0")
-    .add_local_dir(str(HERE / "app"), remote_path="/app/app")
     .env({"PYTHONPATH": "/app"})
+    .add_local_dir(str(HERE / "app"), remote_path="/app/app")
 )
 
 image = (
@@ -279,8 +287,18 @@ class FluxKleinWorker:
         _configure_modal_env()
         from app.comfy_runtime import initialize_comfyui, validate_storage_paths
         from app.config import get_settings
+        from app.gpu_pricing import detect_gpu_cost_per_second, get_gpu_name
+
+        gpu_name = get_gpu_name()
+        cost_per_second = detect_gpu_cost_per_second()
+        os.environ["COST_PER_SECOND"] = str(cost_per_second)
+        get_settings.cache_clear()
 
         validate_storage_paths()
+        print(
+            f"[boot] gpu={gpu_name or 'unknown'} cost_per_second={cost_per_second}",
+            flush=True,
+        )
         print("[boot] loading ComfyUI runtime...", flush=True)
         initialize_comfyui()
         self.settings = get_settings()

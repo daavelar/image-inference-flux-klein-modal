@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     api_host: str = "0.0.0.0"
     api_port: int = 8002
-    cost_per_second: float = 0.000542  # Modal L40S ($0.000542/s); override via COST_PER_SECOND
+    cost_per_second: float = 0.001261  # Modal H200 ($0.001261/s); override via COST_PER_SECOND
 
     comfy_input_dir: Path = PROJECT_ROOT / "vendor" / "comfyui" / "input"
     max_reference_images: int = 4
