@@ -16,6 +16,12 @@ Secrets (Modal Secret name from ``MODAL_AWS_SECRET``):
 GPU: default fallback chain ``H200`` → ``H100`` → ``RTX-PRO-6000`` →
 ``A100-80GB`` → ``A100-40GB`` → ``L40S`` (override with ``MODAL_GPU``).
 
+Cost: each job returns ``cost`` (USD) estimated from container wall time
+(bootstrap, idle gaps, job runtime, amortized scaledown tail) using Modal list
+prices for the detected GPU plus CPU/memory. Tune with ``MODAL_TAIL_IDLE_SECONDS``
+(default 40% of ``scaledown_window``), ``MODAL_CPU_CORES``, ``MODAL_MEMORY_GIB``,
+``MODAL_REGION_MULTIPLIER``.
+
 Populate the volume once from your machine:
     python scripts/upload-models-to-modal-volume.py
     # or: modal volume put fluxkleininf ./models /models
@@ -284,10 +290,14 @@ app = modal.App("flux-klein-modal")
 class FluxKleinWorker:
     @modal.enter()
     def bootstrap(self):
+        from app.modal_billing import ContainerCostTracker, detect_gpu_cost_per_second, get_gpu_name
+
+        self._cost_tracker = ContainerCostTracker.from_env(scaledown_window=300)
+        boot_started = self._cost_tracker.on_boot_start()
+
         _configure_modal_env()
         from app.comfy_runtime import initialize_comfyui, validate_storage_paths
         from app.config import get_settings
-        from app.gpu_pricing import detect_gpu_cost_per_second, get_gpu_name
 
         gpu_name = get_gpu_name()
         cost_per_second = detect_gpu_cost_per_second()
@@ -302,13 +312,23 @@ class FluxKleinWorker:
         print("[boot] loading ComfyUI runtime...", flush=True)
         initialize_comfyui()
         self.settings = get_settings()
-        print("[boot] ready.", flush=True)
+        self._cost_tracker.on_boot_complete(boot_started)
+        print(
+            f"[boot] ready bootstrap_seconds={self._cost_tracker._bootstrap_seconds:.1f}",
+            flush=True,
+        )
 
     @modal.method()
     def run_job(self, job: dict) -> dict:
         from app.inference import generate_from_payload
+        from app.modal_billing import run_with_billing
 
-        return generate_from_payload(self.settings, job)
+        return run_with_billing(
+            self._cost_tracker,
+            generate_from_payload,
+            self.settings,
+            job,
+        )
 
 
 @app.function(
