@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     text_encoder: str = "qwen_3_8b_fp4mixed.safetensors"
     vae: str = "flux2-vae.safetensors"
 
-    image_width: int = 1024
-    image_height: int = 1024
+    image_width: int = 768
+    image_height: int = 1536
     sampler_name: str = "euler"
     scheduler: str = "simple"
     cfg: float = 1.0
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     api_host: str = "0.0.0.0"
     api_port: int = 8002
-    cost_per_second: float = 0.001261  # Modal H200 ($0.001261/s); override via COST_PER_SECOND
+    cost_per_second: float = 0.000583  # Modal A100-40GB ($0.000583/s); override via COST_PER_SECOND
 
     comfy_input_dir: Path = PROJECT_ROOT / "vendor" / "comfyui" / "input"
     max_reference_images: int = 4

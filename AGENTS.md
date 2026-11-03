@@ -11,7 +11,7 @@ Dois modos de execução:
 | Modo | Entrada | Onde roda |
 |------|---------|-----------|
 | **Local** | `python -m app` | Máquina local (GPU ~6 GB VRAM com DynamicVRAM) |
-| **Modal** | `generate-modal.py` | GPU na nuvem (H200→L40S), volume `fluxkleininf` |
+| **Modal** | `generate-modal.py` | GPU na nuvem (A100-40GB→RTX-PRO-6000), volume `fluxkleininf` |
 
 A API expõe os mesmos endpoints em ambos os modos. No Modal, `POST /generate` é **assíncrono** por padrão (202 + poll em `/result/{call_id}`).
 
@@ -112,7 +112,7 @@ bash scripts/sync_comfyui.sh
 - App: `flux-klein-modal`
 - Volume padrão: `fluxkleininf` montado em `/my_vol`
 - Modelos esperados: `/my_vol/models/{diffusion_models,text_encoders,vae,loras}`
-- GPU padrão: cadeia `H200` → `H100` → `RTX-PRO-6000` → `A100-80GB` → `A100-40GB` → `L40S` (`MODAL_GPU` para override)
+- GPU padrão: cadeia `A100-40GB` → `A100-80GB` → `L40S` → `RTX-PRO-6000` (`MODAL_GPU` para override)
 - Custo por job: detectado no boot via `nvidia-smi` (`app/gpu_pricing.py`); taxa aplicada em `COST_PER_SECOND`
 - HTTP label: `flux-http` (URL no output do deploy)
 

@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 
 from app.config import PROJECT_ROOT
+from app.logging_config import configure_aimdo_logging, configure_logging
 
 COMFYUI_ROOT = PROJECT_ROOT / "vendor" / "comfyui"
 MODELS_BASE = os.environ.get("MODELS_BASE", "").strip()
@@ -76,6 +77,8 @@ async def initialize_comfyui_async() -> None:
     if _initialized:
         return
 
+    configure_logging()
+
     comfy_root = str(COMFYUI_ROOT)
     if comfy_root not in sys.path:
         sys.path.insert(0, comfy_root)
@@ -117,6 +120,7 @@ async def initialize_comfyui_async() -> None:
 
         if enables_dynamic_vram():
             comfy_aimdo.control.init()
+            configure_aimdo_logging()
 
         import cuda_malloc  # noqa: F401
         import comfy.model_management
@@ -135,6 +139,7 @@ async def initialize_comfyui_async() -> None:
             if comfy_aimdo.control.init_device(device_index):
                 comfy.model_patcher.CoreModelPatcher = comfy.model_patcher.ModelPatcherDynamic
                 comfy.memory_management.aimdo_enabled = True
+                configure_aimdo_logging()
                 logger.info("DynamicVRAM enabled")
 
         hook_breaker_ac10a0.save_functions()

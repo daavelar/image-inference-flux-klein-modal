@@ -61,13 +61,8 @@ vae/*
 !vae/put_vae_here
 loras/*
 
-# --- Embedded ComfyUI runtime ---
-vendor/comfyui/output/
-vendor/comfyui/temp/
-vendor/comfyui/input/
-vendor/comfyui/user/
-vendor/comfyui/__pycache__/
-vendor/comfyui/**/__pycache__/
+# Local ComfyUI runtime. Populate with scripts/sync_comfyui.sh
+vendor/comfyui/
 
 # --- Modal (local CLI cache, if present) ---
 .modal/

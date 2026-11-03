@@ -1,7 +1,9 @@
 import uvicorn
 
 from app.config import get_settings
+from app.logging_config import configure_logging
 
 if __name__ == "__main__":
+    configure_logging()
     settings = get_settings()
     uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port)

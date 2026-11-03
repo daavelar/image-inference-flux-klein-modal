@@ -4,6 +4,11 @@ from app.config import Settings
 from app.schemas import LoraSpec
 
 
+def _align_dimension(value: int) -> int:
+    """Flux latents prefer multiples of 16."""
+    return max(256, min(2048, (value // 16) * 16))
+
+
 def build_workflow(
     *,
     settings: Settings,
@@ -12,8 +17,14 @@ def build_workflow(
     seed: int,
     loras: list[LoraSpec],
     reference_filenames: list[str] | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    reference_megapixels: float | None = None,
 ) -> dict:
     """Build a ComfyUI API-format workflow for Flux Klein text-to-image."""
+    image_width = _align_dimension(width if width is not None else settings.image_width)
+    image_height = _align_dimension(height if height is not None else settings.image_height)
+
     workflow: dict = {
         "1": {
             "class_type": "UNETLoader",
@@ -37,8 +48,8 @@ def build_workflow(
         "4": {
             "class_type": "EmptyFlux2LatentImage",
             "inputs": {
-                "width": settings.image_width,
-                "height": settings.image_height,
+                "width": image_width,
+                "height": image_height,
                 "batch_size": 1,
             },
         },
@@ -129,16 +140,28 @@ def build_workflow(
                 "class_type": "LoadImage",
                 "inputs": {"image": filename},
             }
-            workflow[scale_id] = {
-                "class_type": "ImageScale",
-                "inputs": {
-                    "image": [load_id, 0],
-                    "upscale_method": "lanczos",
-                    "width": settings.image_width,
-                    "height": settings.image_height,
-                    "crop": "center",
-                },
-            }
+            if reference_megapixels:
+                # Keep the reference aspect ratio (no crop), like the local scene workflow.
+                workflow[scale_id] = {
+                    "class_type": "ImageScaleToTotalPixels",
+                    "inputs": {
+                        "image": [load_id, 0],
+                        "upscale_method": "lanczos",
+                        "megapixels": reference_megapixels,
+                        "resolution_steps": 16,
+                    },
+                }
+            else:
+                workflow[scale_id] = {
+                    "class_type": "ImageScale",
+                    "inputs": {
+                        "image": [load_id, 0],
+                        "upscale_method": "lanczos",
+                        "width": image_width,
+                        "height": image_height,
+                        "crop": "center",
+                    },
+                }
             workflow[encode_id] = {
                 "class_type": "VAEEncode",
                 "inputs": {

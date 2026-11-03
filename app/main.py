@@ -43,6 +43,9 @@ def generate(
             seed=request.seed,
             loras=[LoraSpec(filename=lora.filename, weight=lora.weight) for lora in request.loras],
             reference_images=request.reference_images or None,
+            width=request.width,
+            height=request.height,
+            reference_megapixels=request.reference_megapixels,
         )
     except InferenceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

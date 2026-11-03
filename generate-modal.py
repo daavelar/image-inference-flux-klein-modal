@@ -13,14 +13,13 @@ Secrets (Modal Secret name from ``MODAL_AWS_SECRET``):
     AWS_BUCKET, AWS_ENDPOINT, AWS_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
     Optional: AWS_DEFAULT_REGION, AWS_USE_PATH_STYLE_ENDPOINT
 
-GPU: default fallback chain ``H200`` → ``H100`` → ``RTX-PRO-6000`` →
-``A100-80GB`` → ``A100-40GB`` → ``L40S`` (override with ``MODAL_GPU``).
+GPU: default fallback chain ``A100-40GB`` → ``A100-80GB`` → ``L40S`` →
+``RTX-PRO-6000`` (override with ``MODAL_GPU``).
 
 Cost: each job returns ``cost`` (USD) estimated from container wall time
-(bootstrap, idle gaps, job runtime, amortized scaledown tail) using Modal list
-prices for the detected GPU plus CPU/memory. Tune with ``MODAL_TAIL_IDLE_SECONDS``
-(default 40% of ``scaledown_window``), ``MODAL_CPU_CORES``, ``MODAL_MEMORY_GIB``,
-``MODAL_REGION_MULTIPLIER``.
+(bootstrap, idle gaps, job runtime) using Modal list prices for the detected
+GPU plus CPU/memory. Optional ``MODAL_TAIL_IDLE_SECONDS`` (default 0).
+Tune with ``MODAL_CPU_CORES``, ``MODAL_MEMORY_GIB``, ``MODAL_REGION_MULTIPLIER``.
 
 Populate the volume once from your machine:
     python scripts/upload-models-to-modal-volume.py
@@ -51,12 +50,10 @@ HERE = Path(__file__).resolve().parent
 VOL_NAME = os.environ.get("MODAL_VOLUME_NAME", "fluxkleininf")
 VOL_MOUNT = os.environ.get("MODAL_VOLUME_MOUNT", "/my_vol")
 _DEFAULT_GPU: list[str] = [
-    "H200",
-    "H100",
-    "RTX-PRO-6000",
-    "A100-80GB",
     "A100-40GB",
+    "A100-80GB",
     "L40S",
+    "RTX-PRO-6000",
 ]
 MODAL_GPU_RAW = os.environ.get("MODAL_GPU", "").strip()
 INFERENCE_GPU: str | list[str] = MODAL_GPU_RAW if MODAL_GPU_RAW else _DEFAULT_GPU

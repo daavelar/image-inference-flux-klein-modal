@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
 import subprocess
 import time
@@ -25,6 +27,8 @@ GPU_COST_PER_SECOND: dict[str, float] = {
 CPU_COST_PER_CORE_SECOND = 0.0000131
 MEMORY_COST_PER_GIB_SECOND = 0.00000222
 MIN_CPU_CORES = 0.125
+
+logger = logging.getLogger(__name__)
 
 
 def _env_float(name: str, default: float) -> float:
@@ -53,7 +57,7 @@ def _query_gpu_name() -> str:
 def resolve_gpu_cost_per_second(gpu_name: str) -> tuple[str, float]:
     normalized = gpu_name.upper()
     if not normalized:
-        return "H200", GPU_COST_PER_SECOND["H200"]
+        return "A100-40GB", GPU_COST_PER_SECOND["A100-40GB"]
     if "B300" in normalized:
         return "B300", GPU_COST_PER_SECOND["B300"]
     if "B200" in normalized:
@@ -76,7 +80,7 @@ def resolve_gpu_cost_per_second(gpu_name: str) -> tuple[str, float]:
         return "L4", GPU_COST_PER_SECOND["L4"]
     if "T4" in normalized:
         return "T4", GPU_COST_PER_SECOND["T4"]
-    return "H200", GPU_COST_PER_SECOND["H200"]
+    return "A100-40GB", GPU_COST_PER_SECOND["A100-40GB"]
 
 
 def get_gpu_name() -> str:
@@ -136,7 +140,7 @@ class ContainerCostTracker:
         tail_idle = (
             self.tail_idle_seconds
             if self.tail_idle_seconds is not None
-            else _env_float("MODAL_TAIL_IDLE_SECONDS", self.scaledown_window * 0.4)
+            else _env_float("MODAL_TAIL_IDLE_SECONDS", 0.0)
         )
 
         billed_seconds = (
@@ -215,4 +219,22 @@ def run_with_billing(
         raise
     if not isinstance(result, dict):
         return {"error": f"unexpected job result type: {type(result).__name__}"}
-    return apply_job_cost(result, tracker.finish_job(ctx))
+    billed = apply_job_cost(result, tracker.finish_job(ctx))
+    if not billed.get("error"):
+        logger.info(
+            "[generate] %s",
+            json.dumps(
+                {
+                    "event": "billed",
+                    "url": billed.get("url"),
+                    "key": billed.get("key"),
+                    "seed": billed.get("seed"),
+                    "published": bool(billed.get("url")),
+                    "duration_seconds": billed.get("duration_seconds"),
+                    "cost": billed.get("cost"),
+                    "billed_seconds": billed.get("billed_seconds"),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    return billed

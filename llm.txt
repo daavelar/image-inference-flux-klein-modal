@@ -154,16 +154,23 @@ Limites:
 - Lado máximo 4096 px
 - Formatos: PNG, JPEG, WEBP
 
-As imagens são redimensionadas para 1024×1024 (crop central) antes da inferência.
+As imagens de referência são redimensionadas para `width`×`height` (crop central) antes da inferência.
+
+#### Campos de resolução
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| width | integer | não | Largura da imagem. Default: 768. Faixa: 256–2048 (alinhado a múltiplo de 16). |
+| height | integer | não | Altura da imagem. Default: 1344. Faixa: 256–2048 (alinhado a múltiplo de 16). |
 
 #### Parâmetros fixos do pipeline (não configuráveis via API)
 
-- Resolução: 1024×1024
 - Sampler: euler
 - Scheduler: simple
 - CFG: 1.0
 - FluxGuidance: 4.0
 - Modelo: flux-2-klein-9b.safetensors
+- Resolução padrão: 768×1344 (portrait); override via `width`/`height`
 
 #### Resposta assíncrona (blocking=false, padrão)
 

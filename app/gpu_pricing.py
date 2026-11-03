@@ -8,15 +8,13 @@ from app.modal_billing import (
 )
 
 DEFAULT_GPU_FALLBACK_CHAIN: list[str] = [
-    "H200",
-    "H100",
-    "RTX-PRO-6000",
-    "A100-80GB",
     "A100-40GB",
+    "A100-80GB",
     "L40S",
+    "RTX-PRO-6000",
 ]
 
-_DEFAULT_COST = GPU_COST_PER_SECOND["H200"]
+_DEFAULT_COST = GPU_COST_PER_SECOND["A100-40GB"]
 
 
 def resolve_cost_per_second(gpu_name: str) -> float:
